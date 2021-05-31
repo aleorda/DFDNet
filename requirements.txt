@@ -1,0 +1,15 @@
+torch~=1.8.1
+torchvision~=0.9.1
+Pillow~=8.2.0
+numpy~=1.20.3
+opencv-python~=4.5.2.52
+scipy~=1.6.3
+dominate~=2.6.0
+dlib~=19.22.0
+scikit-image~=0.18.1
+tqdm~=4.61.0
+matplotlib~=3.4.2
+
+requests~=2.25.1
+setuptools~=57.0.0
+beautifulsoup4~=4.9.3
