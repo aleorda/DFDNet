@@ -1,24 +1,25 @@
+import logging
 import os
-from options.test_options import TestOptions
-from data import CreateDataLoader
-from models import create_model
-from util.visualizer import save_crop
-from util import html
-import numpy as np
-import math
-from PIL import Image
-import torchvision.transforms as transforms
-import torch
-import random
+import sys
+
 import cv2
 import dlib
-from skimage import transform as trans
+import numpy as np
+import torch
+import torchvision.transforms as transforms
+from PIL import Image
 from skimage import io
+from skimage import transform as trans
+
 from data.image_folder import make_dataset
-import sys
+from models import create_model
+from options.test_options import TestOptions
+from util.visualizer import save_crop
 
 sys.path.append('FaceLandmarkDetection')
 import face_alignment
+
+logger = logging.getLogger(__name__)
 
 
 ###########################################################################
@@ -26,19 +27,22 @@ import face_alignment
 ###########################################################################
 def get_5_points(img):
     dets = detector(img, 1)
+
     if len(dets) == 0:
         return None
+
     areas = []
     if len(dets) > 1:
-        print('\t###### Warning: more than one face is detected. In this version, we only handle the largest one.')
-    for i in range(len(dets)):
-        area = (dets[i].rect.right() - dets[i].rect.left()) * (dets[i].rect.bottom() - dets[i].rect.top())
+        logger.warning('\tMore than one face is detected. In this version, we only handle the largest one.')
+
+    for j in range(len(dets)):
+        area = (dets[j].rect.right() - dets[j].rect.left()) * (dets[j].rect.bottom() - dets[j].rect.top())
         areas.append(area)
     ins = areas.index(max(areas))
     shape = sp(img, dets[ins].rect)
     single_points = []
-    for i in range(5):
-        single_points.append([shape.part(i).x, shape.part(i).y])
+    for j in range(5):
+        single_points.append([shape.part(j).x, shape.part(j).y])
     return np.array(single_points)
 
 
@@ -47,102 +51,104 @@ def align_and_save(img_path, save_path, save_input_path, save_param_path, upsamp
     img = dlib.load_rgb_image(img_path)
     h, w, _ = img.shape
     source = get_5_points(img)
-    if source is None:  #
-        print('\t################ No face is detected')
+
+    if source is None:
+        logger.error('\tNo face is detected')
         return
+
     tform = trans.SimilarityTransform()
     tform.estimate(source, reference)
-    M = tform.params[0:2, :]
-    crop_img = cv2.warpAffine(img, M, out_size)
+    m = tform.params[0:2, :]
+    crop_img = cv2.warpAffine(img, m, out_size)
     io.imsave(save_path, crop_img)  # save the crop and align face
     io.imsave(save_input_path, img)  # save the whole input image
     tform2 = trans.SimilarityTransform()
     tform2.estimate(reference, source * upsample_scale)
-    # inv_M = cv2.invertAffineTransform(M)
+    # inv_m = cv2.invertAffineTransform(m)
     np.savetxt(save_param_path, tform2.params[0:2, :], fmt='%.3f')  # save the inverse affine parameters
 
 
 def reverse_align(input_path, face_path, param_path, save_path, upsample_scale=2):
-    out_size = (512, 512)
+    # out_size = (512, 512)
     input_img = dlib.load_rgb_image(input_path)
     h, w, _ = input_img.shape
     face512 = dlib.load_rgb_image(face_path)
-    inv_M = np.loadtxt(param_path)
-    inv_crop_img = cv2.warpAffine(face512, inv_M, (w * upsample_scale, h * upsample_scale))
+    inv_m = np.loadtxt(param_path)
+    inv_crop_img = cv2.warpAffine(face512, inv_m, (w * upsample_scale, h * upsample_scale))
     mask = np.ones((512, 512, 3), dtype=np.float32)  # * 255
-    inv_mask = cv2.warpAffine(mask, inv_M, (w * upsample_scale, h * upsample_scale))
+    inv_mask = cv2.warpAffine(mask, inv_m, (w * upsample_scale, h * upsample_scale))
     upsample_img = cv2.resize(input_img, (w * upsample_scale, h * upsample_scale))
-    inv_mask_erosion_removeborder = cv2.erode(inv_mask, np.ones((2 * upsample_scale, 2 * upsample_scale),
-                                                                np.uint8))  # to remove the black border
-    inv_crop_img_removeborder = inv_mask_erosion_removeborder * inv_crop_img
-    total_face_area = np.sum(inv_mask_erosion_removeborder) // 3
+    inv_mask_erosion_remove_border = cv2.erode(inv_mask, np.ones((2 * upsample_scale, 2 * upsample_scale),
+                                                                 np.uint8))  # to remove the black border
+    inv_crop_img_remove_border = inv_mask_erosion_remove_border * inv_crop_img
+    total_face_area = np.sum(inv_mask_erosion_remove_border) // 3
     w_edge = int(total_face_area ** 0.5) // 20  # compute the fusion edge based on the area of face
     erosion_radius = w_edge * 2
-    inv_mask_center = cv2.erode(inv_mask_erosion_removeborder, np.ones((erosion_radius, erosion_radius), np.uint8))
+    inv_mask_center = cv2.erode(inv_mask_erosion_remove_border, np.ones((erosion_radius, erosion_radius), np.uint8))
     blur_size = w_edge * 2
     inv_soft_mask = cv2.GaussianBlur(inv_mask_center, (blur_size + 1, blur_size + 1), 0)
-    merge_img = inv_soft_mask * inv_crop_img_removeborder + (1 - inv_soft_mask) * upsample_img
+    merge_img = inv_soft_mask * inv_crop_img_remove_border + (1 - inv_soft_mask) * upsample_img
     io.imsave(save_path, merge_img.astype(np.uint8))
 
 
 ###########################################################################
 ################ functions of preparing the test images ###################
 ###########################################################################
-def AddUpSample(img):
+def add_up_sample(img):
     return img.resize((512, 512), Image.BICUBIC)
 
 
-def get_part_location(partpath, imgname):
-    Landmarks = []
-    if not os.path.exists(os.path.join(partpath, imgname + '.txt')):
-        print(os.path.join(partpath, imgname + '.txt'))
+def get_part_location(part_path, name):
+    landmarks = []
+    if not os.path.exists(os.path.join(part_path, name + '.txt')):
+        print(os.path.join(part_path, name + '.txt'))
         print('\t################ No landmark file')
         return 0
-    with open(os.path.join(partpath, imgname + '.txt'), 'r') as f:
+    with open(os.path.join(part_path, name + '.txt'), 'r') as f:
         for line in f:
-            tmp = [np.float(i) for i in line.split(' ') if i != '\n']
-            Landmarks.append(tmp)
-    Landmarks = np.array(Landmarks)
-    Map_LE = list(np.hstack((range(17, 22), range(36, 42))))
-    Map_RE = list(np.hstack((range(22, 27), range(42, 48))))
-    Map_NO = list(range(29, 36))
-    Map_MO = list(range(48, 68))
+            tmp = [np.float(i) for j in line.split(' ') if i != '\n']
+            landmarks.append(tmp)
+    landmarks = np.array(landmarks)
+    map_le = list(np.hstack((range(17, 22), range(36, 42))))
+    map_re = list(np.hstack((range(22, 27), range(42, 48))))
+    map_no = list(range(29, 36))
+    map_mo = list(range(48, 68))
     try:
         # left eye
-        Mean_LE = np.mean(Landmarks[Map_LE], 0)
-        L_LE = np.max((np.max(np.max(Landmarks[Map_LE], 0) - np.min(Landmarks[Map_LE], 0)) / 2, 16))
-        Location_LE = np.hstack((Mean_LE - L_LE + 1, Mean_LE + L_LE)).astype(int)
+        mean_le = np.mean(landmarks[map_le], 0)
+        l_le = np.max((np.max(np.max(landmarks[map_le], 0) - np.min(landmarks[map_le], 0)) / 2, 16))
+        location_le = np.hstack((mean_le - l_le + 1, mean_le + l_le)).astype(int)
         # right eye
-        Mean_RE = np.mean(Landmarks[Map_RE], 0)
-        L_RE = np.max((np.max(np.max(Landmarks[Map_RE], 0) - np.min(Landmarks[Map_RE], 0)) / 2, 16))
-        Location_RE = np.hstack((Mean_RE - L_RE + 1, Mean_RE + L_RE)).astype(int)
+        mean_re = np.mean(landmarks[map_re], 0)
+        l_re = np.max((np.max(np.max(landmarks[map_re], 0) - np.min(landmarks[map_re], 0)) / 2, 16))
+        location_re = np.hstack((mean_re - l_re + 1, mean_re + l_re)).astype(int)
         # nose
-        Mean_NO = np.mean(Landmarks[Map_NO], 0)
-        L_NO = np.max((np.max(np.max(Landmarks[Map_NO], 0) - np.min(Landmarks[Map_NO], 0)) / 2, 16))
-        Location_NO = np.hstack((Mean_NO - L_NO + 1, Mean_NO + L_NO)).astype(int)
+        mean_no = np.mean(landmarks[map_no], 0)
+        l_no = np.max((np.max(np.max(landmarks[map_no], 0) - np.min(landmarks[map_no], 0)) / 2, 16))
+        location_no = np.hstack((mean_no - l_no + 1, mean_no + l_no)).astype(int)
         # mouth
-        Mean_MO = np.mean(Landmarks[Map_MO], 0)
-        L_MO = np.max((np.max(np.max(Landmarks[Map_MO], 0) - np.min(Landmarks[Map_MO], 0)) / 2, 16))
-        Location_MO = np.hstack((Mean_MO - L_MO + 1, Mean_MO + L_MO)).astype(int)
+        mean_mo = np.mean(landmarks[map_mo], 0)
+        l_mo = np.max((np.max(np.max(landmarks[map_mo], 0) - np.min(landmarks[map_mo], 0)) / 2, 16))
+        location_mo = np.hstack((mean_mo - l_mo + 1, mean_mo + l_mo)).astype(int)
     except:
         return 0
-    return torch.from_numpy(Location_LE).unsqueeze(0), torch.from_numpy(Location_RE).unsqueeze(0), torch.from_numpy(
-        Location_NO).unsqueeze(0), torch.from_numpy(Location_MO).unsqueeze(0)
+    return torch.from_numpy(location_le).unsqueeze(0), torch.from_numpy(location_re).unsqueeze(0), torch.from_numpy(
+        location_no).unsqueeze(0), torch.from_numpy(location_mo).unsqueeze(0)
 
 
-def obtain_inputs(img_path, Landmark_path, img_name):
-    A_paths = os.path.join(img_path, img_name)
-    A = Image.open(A_paths).convert('RGB')
-    Part_locations = get_part_location(Landmark_path, img_name)
-    if Part_locations == 0:
+def obtain_inputs(img_path, landmark_path, name):
+    a_paths = os.path.join(img_path, name)
+    a = Image.open(a_paths).convert('RGB')
+    part_locations = get_part_location(landmark_path, name)
+    if part_locations == 0:
         return 0
-    C = A
-    A = AddUpSample(A)
-    A = transforms.ToTensor()(A)
-    C = transforms.ToTensor()(C)
-    A = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(A)  #
-    C = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(C)  #
-    return {'A': A.unsqueeze(0), 'C': C.unsqueeze(0), 'A_paths': A_paths, 'Part_locations': Part_locations}
+    c = a
+    a = add_up_sample(a)
+    a = transforms.ToTensor()(a)
+    c = transforms.ToTensor()(c)
+    a = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(a)
+    c = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(c)
+    return {'A': a.unsqueeze(0), 'C': c.unsqueeze(0), 'A_paths': a_paths, 'Part_locations': part_locations}
 
 
 if __name__ == '__main__':
@@ -157,9 +163,9 @@ if __name__ == '__main__':
     #######################################################################
     ########################### Test Param ################################
     #######################################################################
-    # opt.gpu_ids = [0] # gpu id. if use cpu, set opt.gpu_ids = []
+    opt.gpu_ids = []  # gpu id. if use cpu, set opt.gpu_ids = []
     # TestImgPath = './TestData/TestWhole' # test image path
-    # ResultsDir = './Results/TestWholeResults' #save path 
+    # ResultsDir = './Results/TestWholeResults' #save path
     # UpScaleWhole = 4  # the upsamle scale. It should be noted that our face results are fixed to 512.
     TestImgPath = opt.test_path
     ResultsDir = opt.results_dir
@@ -190,11 +196,11 @@ if __name__ == '__main__':
 
     ImgPaths = make_dataset(TestImgPath)
     for i, ImgPath in enumerate(ImgPaths):
-        ImgName = os.path.split(ImgPath)[-1]
-        print('Crop and Align {} image'.format(ImgName))
-        SavePath = os.path.join(SaveCropPath, ImgName)
-        SaveInput = os.path.join(SaveInputPath, ImgName)
-        SaveParam = os.path.join(SaveParamPath, ImgName + '.npy')
+        img_name = os.path.split(ImgPath)[-1]
+        print('Crop and Align {} image'.format(img_name))
+        SavePath = os.path.join(SaveCropPath, img_name)
+        SaveInput = os.path.join(SaveInputPath, img_name)
+        SaveParam = os.path.join(SaveParamPath, img_name + '.npy')
         align_and_save(ImgPath, SavePath, SaveInput, SaveParam, UpScaleWhole)
 
     #######################################################################
@@ -204,18 +210,18 @@ if __name__ == '__main__':
     print('####################### Step 2: Face Landmark Detection #######################')
     print('###############################################################################\n')
 
-    SaveLandmarkPath = os.path.join(ResultsDir, 'Step2_Landmarks')
+    SaveLandmarkPath = os.path.join(ResultsDir, 'Step2_landmarks')
     if len(opt.gpu_ids) > 0:
         dev = 'cuda:{}'.format(opt.gpu_ids[0])
     else:
         dev = 'cpu'
-    FD = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, device=dev, flip_input=False)
+    FD = face_alignment.FaceAlignment(face_alignment.landmarksType._2D, device=dev, flip_input=False)
     if not os.path.exists(SaveLandmarkPath):
         os.makedirs(SaveLandmarkPath)
     ImgPaths = make_dataset(SaveCropPath)
     for i, ImgPath in enumerate(ImgPaths):
-        ImgName = os.path.split(ImgPath)[-1]
-        print('Detecting {}'.format(ImgName))
+        img_name = os.path.split(ImgPath)[-1]
+        print('Detecting {}'.format(img_name))
         Img = io.imread(ImgPath)
         try:
             PredsAll = FD.get_landmarks(Img)
@@ -235,7 +241,7 @@ if __name__ == '__main__':
             # continue
         preds = PredsAll[ins]
         AddLength = np.sqrt(np.sum(np.power(preds[27][0:2] - preds[33][0:2], 2)))
-        SaveName = ImgName + '.txt'
+        SaveName = img_name + '.txt'
         np.savetxt(os.path.join(SaveLandmarkPath, SaveName), preds[:, 0:2], fmt='%.3f')
 
     #######################################################################
@@ -255,10 +261,10 @@ if __name__ == '__main__':
     ImgPaths = make_dataset(SaveCropPath)
     total = 0
     for i, ImgPath in enumerate(ImgPaths):
-        ImgName = os.path.split(ImgPath)[-1]
-        print('Restoring {}'.format(ImgName))
+        img_name = os.path.split(ImgPath)[-1]
+        print('Restoring {}'.format(img_name))
         torch.cuda.empty_cache()
-        data = obtain_inputs(SaveCropPath, SaveLandmarkPath, ImgName)
+        data = obtain_inputs(SaveCropPath, SaveLandmarkPath, img_name)
         if data == 0:
             print('\t################ Error in landmark file, continue...')
             continue  #
@@ -267,7 +273,7 @@ if __name__ == '__main__':
         try:
             model.test()
             visuals = model.get_current_visuals()
-            save_crop(visuals, os.path.join(SaveRestorePath, ImgName))
+            save_crop(visuals, os.path.join(SaveRestorePath, img_name))
         except Exception as e:
             print('\t################ Error in enhancing this image: {}'.format(str(e)))
             print('\t################ continue...')
@@ -286,12 +292,12 @@ if __name__ == '__main__':
         os.makedirs(SaveFianlPath)
     ImgPaths = make_dataset(SaveRestorePath)
     for i, ImgPath in enumerate(ImgPaths):
-        ImgName = os.path.split(ImgPath)[-1]
-        print('Final Restoring {}'.format(ImgName))
-        WholeInputPath = os.path.join(TestImgPath, ImgName)
-        FaceResultPath = os.path.join(SaveRestorePath, ImgName)
-        ParamPath = os.path.join(SaveParamPath, ImgName + '.npy')
-        SaveWholePath = os.path.join(SaveFianlPath, ImgName)
+        img_name = os.path.split(ImgPath)[-1]
+        print('Final Restoring {}'.format(img_name))
+        WholeInputPath = os.path.join(TestImgPath, img_name)
+        FaceResultPath = os.path.join(SaveRestorePath, img_name)
+        ParamPath = os.path.join(SaveParamPath, img_name + '.npy')
+        SaveWholePath = os.path.join(SaveFianlPath, img_name)
         reverse_align(WholeInputPath, FaceResultPath, ParamPath, SaveWholePath, UpScaleWhole)
 
     print('\nAll results are saved in {} \n'.format(ResultsDir))

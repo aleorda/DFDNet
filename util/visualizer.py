@@ -1,19 +1,23 @@
-import numpy as np
-import os
 import ntpath
+import os
 import time
-from . import util
+
+import numpy as np
+
 from . import html
+from . import util
+
+
 # from scipy.misc import imresize
 
 
 # save image to the disk
 def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
     image_dir = webpage.get_image_dir()
-    if isinstance(image_path,list):
+    if isinstance(image_path, list):
         image_path = image_path[0]
     short_path = ntpath.basename(image_path)
-    
+
     name = os.path.splitext(short_path)[0]
 
     webpage.add_header(name)
@@ -24,36 +28,38 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
         # image_name = '%s_%s.png' % (name, label)
         # save_path = os.path.join(image_dir, image_name)
         image_name = '%s.png' % (name)
-        
+
         util.mkdirs(os.path.join(image_dir, label))
         save_path = os.path.join(image_dir, label, image_name)
-        
+
         h, w, _ = im.shape
-#         if aspect_ratio > 1.0:
-#             im = imresize(im, (h, int(w * aspect_ratio)), interp='bicubic')
-#         if aspect_ratio < 1.0:
-#             im = imresize(im, (int(h / aspect_ratio), w), interp='bicubic')
+        #         if aspect_ratio > 1.0:
+        #             im = imresize(im, (h, int(w * aspect_ratio)), interp='bicubic')
+        #         if aspect_ratio < 1.0:
+        #             im = imresize(im, (int(h / aspect_ratio), w), interp='bicubic')
 
         util.save_image(im, save_path)
 
-        link_name = os.path.join(label,image_name)
+        link_name = os.path.join(label, image_name)
         ims.append(link_name)
         txts.append(label)
         links.append(link_name)
     webpage.add_images(ims, txts, links, width=width)
+
 
 def save_crop(visuals, save_path):
     im_data = visuals['fake_A']
     im = util.tensor2im(im_data)
     util.save_image(im, save_path)
 
+
 # save image to the disk
 def save_images_test(webpage, visuals, image_dir, image_path, aspect_ratio=1.0, width=256):
     # image_dir = webpage.get_image_dir()
-    if isinstance(image_path,list):
+    if isinstance(image_path, list):
         image_path = image_path[0]
     short_path = ntpath.basename(image_path)
-    
+
     name = os.path.splitext(short_path)[0]
 
     webpage.add_header(name)
@@ -64,28 +70,28 @@ def save_images_test(webpage, visuals, image_dir, image_path, aspect_ratio=1.0, 
         # image_name = '%s_%s.png' % (name, label)
         # save_path = os.path.join(image_dir, image_name)
         image_name = '%s.png' % (name)
-        
+
         util.mkdirs(os.path.join(image_dir, label))
         save_path = os.path.join(image_dir, label, image_name)
 
         exit('wwwwwwwwwwwww')
 
-        
         h, w, _ = im.shape
-#         if aspect_ratio > 1.0:
-#             im = imresize(im, (h, int(w * aspect_ratio)), interp='bicubic')
-#         if aspect_ratio < 1.0:
-#             im = imresize(im, (int(h / aspect_ratio), w), interp='bicubic')
+        #         if aspect_ratio > 1.0:
+        #             im = imresize(im, (h, int(w * aspect_ratio)), interp='bicubic')
+        #         if aspect_ratio < 1.0:
+        #             im = imresize(im, (int(h / aspect_ratio), w), interp='bicubic')
 
         util.save_image(im, save_path)
 
-        link_name = os.path.join(label,image_name)
+        link_name = os.path.join(label, image_name)
         ims.append(link_name)
         txts.append(label)
         links.append(link_name)
     webpage.add_images(ims, txts, links, width=width)
 
-# save image to the disk 
+
+# save image to the disk
 # Original Version
 # def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
 #     image_dir = webpage.get_image_dir()
@@ -115,7 +121,7 @@ def save_images_test(webpage, visuals, image_dir, image_path, aspect_ratio=1.0, 
 class Visualizer():
     def __init__(self, opt):
         self.display_id = opt.display_id
-        self.use_html = opt.isTrain and not opt.no_html
+        self.use_html = opt.is_train and not opt.no_html
         self.win_size = opt.display_winsize
         self.name = opt.name
         self.opt = opt
@@ -123,7 +129,8 @@ class Visualizer():
         if self.display_id > 0:
             import visdom
             self.ncols = opt.display_ncols
-            self.vis = visdom.Visdom(server=opt.display_server, port=opt.display_port, env=opt.display_env, raise_exceptions=True)
+            self.vis = visdom.Visdom(server=opt.display_server, port=opt.display_port, env=opt.display_env,
+                                     raise_exceptions=True)
 
         if self.use_html:
             self.web_dir = os.path.join(opt.checkpoints_dir, opt.name, 'web')
@@ -139,7 +146,8 @@ class Visualizer():
         self.saved = False
 
     def throw_visdom_connection_error(self):
-        print('\n\nCould not connect to Visdom server (https://github.com/facebookresearch/visdom) for displaying training progress.\nYou can suppress connection to Visdom using the option --display_id -1. To install visdom, run \n$ pip install visdom\n, and start the server by \n$ python -m visdom.server.\n\n')
+        print(
+            '\n\nCould not connect to Visdom server (https://github.com/facebookresearch/visdom) for displaying training progress.\nYou can suppress connection to Visdom using the option --display_id -1. To install visdom, run \n$ pip install visdom\n, and start the server by \n$ python -m visdom.server.\n\n')
         exit(1)
 
     # |visuals|: dictionary of images to display or save

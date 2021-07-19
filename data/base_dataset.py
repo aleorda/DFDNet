@@ -1,6 +1,6 @@
 import torch.utils.data as data
-from PIL import Image
 import torchvision.transforms as transforms
+from PIL import Image
 
 
 class BaseDataset(data.Dataset):
@@ -24,7 +24,7 @@ class BaseDataset(data.Dataset):
 def get_transform(opt):
     transform_list = []
     if opt.resize_or_crop == 'resize_and_crop':
-        
+
         osize = [opt.loadSize, opt.loadSize]
         transform_list.append(transforms.Resize(osize, Image.BICUBIC))
         transform_list.append(transforms.RandomCrop(opt.fineSize))
@@ -43,13 +43,14 @@ def get_transform(opt):
     else:
         raise ValueError('--resize_or_crop %s is not a valid option.' % opt.resize_or_crop)
 
-    if opt.isTrain and not opt.no_flip:
+    if opt.is_train and not opt.no_flip:
         transform_list.append(transforms.RandomHorizontalFlip())
 
     transform_list += [transforms.ToTensor(),
                        transforms.Normalize((0.5, 0.5, 0.5),
                                             (0.5, 0.5, 0.5))]
     return transforms.Compose(transform_list)
+
 
 # just modify the width and height to be multiple of 4
 def __adjust(img):
@@ -58,7 +59,7 @@ def __adjust(img):
     # the size needs to be a multiple of this number, 
     # because going through generator network may change img size
     # and eventually cause size mismatch error
-    mult = 4 
+    mult = 4
     if ow % mult == 0 and oh % mult == 0:
         return img
     w = (ow - 1) // mult
@@ -68,13 +69,13 @@ def __adjust(img):
 
     if ow != w or oh != h:
         __print_size_warning(ow, oh, w, h)
-        
+
     return img.resize((w, h), Image.BICUBIC)
 
 
 def __scale_width(img, target_width):
     ow, oh = img.size
-    
+
     # the size needs to be a multiple of this number, 
     # because going through generator network may change img size
     # and eventually cause size mismatch error    
@@ -89,7 +90,7 @@ def __scale_width(img, target_width):
 
     if target_height != h:
         __print_size_warning(target_width, target_height, w, h)
-    
+
     return img.resize((w, h), Image.BICUBIC)
 
 
@@ -100,5 +101,3 @@ def __print_size_warning(ow, oh, w, h):
               "(%d, %d). This adjustment will be done to all images "
               "whose sizes are not multiples of 4" % (ow, oh, w, h))
         __print_size_warning.has_printed = True
-
-

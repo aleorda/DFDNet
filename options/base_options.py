@@ -6,9 +6,10 @@ import models
 import data
 
 
-class BaseOptions():
+class BaseOptions:
     def __init__(self):
         self.initialized = False
+        self.opt = {}
 
     def initialize(self, parser):
         
@@ -43,7 +44,7 @@ class BaseOptions():
         # modify model-related parser options
         model_name = opt.model
         model_option_setter = models.get_option_setter(model_name)
-        parser = model_option_setter(parser, self.isTrain)
+        parser = model_option_setter(parser, self.is_train)
 
         opt, _ = parser.parse_known_args()  # parse again with the new defaults
 
@@ -51,7 +52,7 @@ class BaseOptions():
         dataset_name = opt.dataset_mode
 
         dataset_option_setter = data.get_option_setter(dataset_name)
-        parser = dataset_option_setter(parser, self.isTrain)
+        parser = dataset_option_setter(parser, self.is_train)
 
         self.parser = parser
 
@@ -80,7 +81,7 @@ class BaseOptions():
     def parse(self):
 
         opt = self.gather_options()
-        opt.isTrain = self.isTrain   # train or test
+        opt.is_train = self.is_train   # train or test
 
         # process opt.suffix
         if opt.suffix:
@@ -93,9 +94,9 @@ class BaseOptions():
         str_ids = opt.gpu_ids.split(',')
         opt.gpu_ids = []
         for str_id in str_ids:
-            id = int(str_id)
-            if id >= 0:
-                opt.gpu_ids.append(id)
+            gpu_id = int(str_id)
+            if gpu_id >= 0:
+                opt.gpu_ids.append(gpu_id)
         if len(opt.gpu_ids) > 0:
             torch.cuda.set_device(opt.gpu_ids[0])
 

@@ -8,8 +8,9 @@
 # https://github.com/vacancy/Synchronized-BatchNorm-PyTorch
 # Distributed under MIT License.
 
-import unittest
 import torch
+
+import unittest
 
 
 class TorchTestCase(unittest.TestCase):
@@ -26,4 +27,3 @@ class TorchTestCase(unittest.TestCase):
             'rdiff={}\n'
         ).format(adiff, rdiff)
         self.assertTrue(torch.allclose(x, y), message)
-

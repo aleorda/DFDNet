@@ -1,6 +1,8 @@
 import os
-import torch
 from collections import OrderedDict
+
+import torch
+
 from . import networks
 
 
@@ -11,14 +13,14 @@ class BaseModel():
     @staticmethod
     def modify_commandline_options(parser, is_train):
         return parser
-    
+
     def name(self):
         return 'BaseModel'
 
     def initialize(self, opt):
         self.opt = opt
         self.gpu_ids = opt.gpu_ids
-        self.isTrain = opt.isTrain
+        self.is_train = opt.is_train
         self.device = torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')
         self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)
         if opt.resize_or_crop != 'scale_width':
@@ -37,9 +39,9 @@ class BaseModel():
 
     # load and print networks; create schedulers
     def setup(self, opt, parser=None):
-        if self.isTrain:
+        if self.is_train:
             self.schedulers = [networks.get_scheduler(optimizer, opt) for optimizer in self.optimizers]
-        if not self.isTrain or opt.continue_train:
+        if not self.is_train or opt.continue_train:
             self.load_networks(opt.which_epoch)
         self.print_networks(opt.verbose)
 
@@ -109,7 +111,7 @@ class BaseModel():
                 if getattr(module, key) is None:
                     state_dict.pop('.'.join(keys))
             if module.__class__.__name__.startswith('InstanceNorm') and \
-               (key == 'num_batches_tracked'):
+                    (key == 'num_batches_tracked'):
                 state_dict.pop('.'.join(keys))
         else:
             self.__patch_instance_norm_state_dict(state_dict, getattr(module, key), keys, i + 1)

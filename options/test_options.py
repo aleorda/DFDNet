@@ -16,5 +16,5 @@ class TestOptions(BaseOptions):
         parser.add_argument('--upscale_factor', type=int, default=4, help='upscale factor for the whole input image (not for face)')
 
         
-        self.isTrain = False
+        self.is_train = False
         return parser
